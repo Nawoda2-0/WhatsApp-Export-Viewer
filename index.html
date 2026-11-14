@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#f0f2f5" />
+  <title>WhatsApp Chat Viewer</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app-shell" id="app">
+    <aside class="sidebar" id="sidebar" aria-label="Chats">
+      <header class="sidebar-header">
+        <div class="brand"><span class="brand-icon" aria-hidden="true"><svg viewBox="0 0 32 32"><path fill="currentColor" d="M16 2a14 14 0 0 0-12 21.3L2 30l7-1.8A14 14 0 1 0 16 2Zm0 25.3a11.3 11.3 0 0 1-5.8-1.6l-.4-.2-4.1 1.1 1.1-4-.3-.4A11.3 11.3 0 1 1 16 27.3Zm6.2-8.5c-.3-.2-1.9-1-2.2-1.1-.3-.1-.5-.2-.7.2-.2.3-.8 1.1-1 1.3-.2.2-.4.2-.7.1a9.3 9.3 0 0 1-4.6-4c-.3-.5.3-.5.8-1.5.1-.2 0-.4 0-.6l-1-2.4c-.2-.5-.5-.4-.7-.4h-.6c-.2 0-.6.1-.9.4a3.6 3.6 0 0 0-1.1 2.6c0 1.6 1.2 3.1 1.4 3.3.2.2 2.4 3.7 5.9 5.2 2.1.9 2.9 1 4 .8.6-.1 1.9-.8 2.1-1.6.2-.7.2-1.4.1-1.5-.1-.1-.3-.2-.6-.4Z"/></svg></span><h1>WhatsApp</h1></div>
+        <div class="header-buttons">
+          <button class="icon-button" id="openFolderSidebar" type="button" title="Import export folder" aria-label="Import export folder"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10H3Z"/><path d="M12 10v7m-3-3.5h6"/></svg></button><button class="icon-button" id="openFileSidebar" type="button" title="Import chat" aria-label="Import chat"><svg viewBox="0 0 24 24"><path d="M12 4v16M4 12h16"/></svg></button>
+          <button class="icon-button" id="themeToggle" type="button" title="Toggle dark mode" aria-label="Toggle dark mode"><svg viewBox="0 0 24 24"><path d="M20.1 15.7A8.5 8.5 0 0 1 8.3 3.9 8.5 8.5 0 1 0 20.1 15.7Z"/></svg></button>
+          <button class="icon-button" id="menuButton" type="button" title="More options" aria-label="More options"><svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/></svg></button>
+        </div>
+      </header>
+      <div class="sidebar-tools">
+        <label class="search-field"><svg viewBox="0 0 24 24"><path d="m20 20-4.3-4.3M10.8 17.3a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13Z"/></svg><input id="chatFilter" type="search" placeholder="Search or start new chat" autocomplete="off" /></label>
+        <div class="filters"><button class="filter-chip active" type="button">All</button><button class="filter-chip" type="button" id="unreadChip" title="Imported chats don't have unread status">Unread</button><button class="filter-chip" type="button" id="groupsChip">Groups</button></div>
+      </div>
+      <div class="chat-list" id="chatList" aria-label="Imported conversations"><div class="sidebar-empty">Your imported conversations will appear here.</div></div>
+      <div class="sidebar-footer"><svg viewBox="0 0 24 24"><path d="M12 2 4 5v6c0 5.2 3.5 9.4 8 11 4.5-1.6 8-5.8 8-11V5l-8-3Z"/><path d="m9 12 2 2 4-4"/></svg><span>Private viewer · Files never leave your device</span></div>
+    </aside>
+
+    <main class="main-pane" id="mainPane">
+      <section class="welcome-screen" id="welcomeScreen">
+        <div class="welcome-art" aria-hidden="true"><svg viewBox="0 0 250 200"><rect x="50" y="24" width="150" height="150" rx="15" fill="#d9fdd3"/><rect x="67" y="45" width="116" height="16" rx="8" fill="#81c995"/><rect x="67" y="74" width="85" height="16" rx="8" fill="#a6d8ab"/><rect x="95" y="103" width="88" height="16" rx="8" fill="#ffffff"/><rect x="70" y="132" width="112" height="16" rx="8" fill="#ffffff"/><circle cx="193" cy="151" r="30" fill="#00a884"/><path d="M193 136v30m-15-15h30" stroke="white" stroke-width="6" stroke-linecap="round"/></svg></div>
+        <h2>WhatsApp Chat Viewer</h2>
+        <p>Open an exported WhatsApp conversation and explore it in a familiar chat interface.</p>
+        <button class="primary-button" id="importFolderWelcome" type="button"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10H3Z"/><path d="M12 10v7m-3-3.5h6"/></svg> Import WhatsApp export folder</button><button class="secondary-button welcome-secondary" id="importWelcome" type="button"><svg viewBox="0 0 24 24"><path d="M12 16V3m0 13-4-4m4 4 4-4M4 17v3h16v-3"/></svg> Import TXT only</button>
+        <p class="welcome-tip">Select the folder containing your TXT file and exported photos, videos, stickers, voice notes and documents.</p><p class="privacy-note"><svg viewBox="0 0 24 24"><path d="M12 2 4 5v6c0 5.2 3.5 9.4 8 11 4.5-1.6 8-5.8 8-11V5l-8-3Z"/><path d="m9 12 2 2 4-4"/></svg> Your chat is processed in this browser only.</p>
+      </section>
+
+      <section class="conversation hidden" id="conversation" aria-label="Conversation">
+        <header class="conversation-header"><button class="icon-button back-button" id="backButton" type="button" title="Back to chats" aria-label="Back to chats"><svg viewBox="0 0 24 24"><path d="m15 5-7 7 7 7"/></svg></button><button class="profile-trigger" id="profileTrigger" type="button" title="Open contact info"><div class="avatar" id="activeAvatar" aria-hidden="true">C</div><div class="contact-details"><strong id="contactName">Chat</strong><span id="contactSubtitle">Imported conversation</span></div></button><button class="icon-button" id="searchToggle" type="button" title="Search messages" aria-label="Search messages"><svg viewBox="0 0 24 24"><circle cx="10.8" cy="10.8" r="6.5"/><path d="m16 16 4 4"/></svg></button><button class="icon-button" id="infoToggle" type="button" title="Chat details" aria-label="Chat details"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5m0-8v.2"/></svg></button></header>
+        <div class="in-chat-search hidden" id="inChatSearch"><input type="search" id="messageSearch" placeholder="Search messages" aria-label="Search messages" /><span id="searchCount"></span><button class="icon-button" id="searchPrev" type="button" aria-label="Previous result" title="Previous result">↑</button><button class="icon-button" id="searchNext" type="button" aria-label="Next result" title="Next result">↓</button><button class="icon-button" id="searchClose" type="button" aria-label="Close search" title="Close search">×</button></div>
+        <div class="messages-scroller" id="messagesScroller"><div class="messages" id="messages"></div></div>
+        <div class="read-only-bar"><svg viewBox="0 0 24 24"><path d="M12 2 4 5v6c0 5.2 3.5 9.4 8 11 4.5-1.6 8-5.8 8-11V5l-8-3Z"/><path d="m9 12 2 2 4-4"/></svg><span>Read-only archive · Messages cannot be sent from this viewer</span><button id="jumpToBottom" type="button" title="Jump to latest message" aria-label="Jump to latest message"><svg viewBox="0 0 24 24"><path d="M12 4v16m-6-6 6 6 6-6"/></svg></button></div>
+      </section>
+    </main>
+  </div>
+  <input id="fileInput" type="file" accept=".txt,text/plain" multiple hidden /><input id="folderInput" type="file" webkitdirectory directory multiple hidden />
+  <div class="drop-overlay hidden" id="dropOverlay"><div><svg viewBox="0 0 24 24"><path d="M12 3v13m-5-5 5 5 5-5M4 17v4h16v-4"/></svg><strong>Drop an export folder or its files here</strong></div></div>
+  <dialog id="settingsDialog" class="modal"><div class="modal-heading"><h2>Chat settings</h2><button class="icon-button close-dialog" type="button" aria-label="Close">×</button></div><label for="selfName">Your name in the exported chat</label><select id="selfName"><option value="">-- Select your name --</option></select><p class="modal-hint">Messages from this sender appear on the right in green. Choose the name that represents you in this exported conversation. The other sender will appear on the left. This setting is saved separately for each imported chat during this session.</p><div class="modal-actions"><button class="secondary-button" id="clearChats" type="button">Remove imported chats</button><button class="primary-button" id="saveSettings" type="button">Apply</button></div></dialog>
+  <dialog id="infoDialog" class="modal info-modal"><div class="modal-heading"><h2>Contact info</h2><button class="icon-button close-dialog" type="button" aria-label="Close">×</button></div><div id="chatInfo"></div><div class="modal-actions"><button class="secondary-button" id="setSenderButton" type="button">Choose my sender name</button><button class="primary-button close-info" type="button">Done</button></div></dialog>
+  <dialog id="mediaDialog" class="media-dialog"><header class="media-dialog-header"><span id="mediaTitle">Media</span><div><a id="mediaDownload" class="media-download" download>Download</a><button id="mediaClose" class="icon-button" type="button" aria-label="Close media">×</button></div></header><div id="mediaViewer" class="media-viewer"></div></dialog>
+  <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+  <script src="script.js" defer></script>
+</body>
+</html>
