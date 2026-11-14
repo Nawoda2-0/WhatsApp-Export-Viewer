@@ -3,13 +3,13 @@
   'use strict';
   const $ = id => document.getElementById(id);
   const state = { chats: [], activeId: null, matches: [], matchIndex: -1, filter: 'all', searchTerm: '', infoTab:'media' };
-  const mediaExt = /\.(?:jpe?g|png|gif|webp|bmp|avif|heic|mp4|m4v|mov|webm|3gp|mkv|mp3|wav|m4a|aac|ogg|opus|oga|amr|pdf|docx?|xlsx?|pptx?|txt|zip|7z|vcf)$/i;
+  const mediaExt = /\.[a-z0-9]{1,12}$/i; // Match referenced attachments by exact filename, regardless of extension.
   const imageExt = /\.(?:jpe?g|png|gif|webp|bmp|avif|heic)$/i;
   const videoExt = /\.(?:mp4|m4v|mov|webm|3gp|mkv)$/i;
   const audioExt = /\.(?:mp3|wav|m4a|aac|ogg|opus|oga|amr)$/i;
-  const mediaKind = name => imageExt.test(name)? (/^(?:STK-|sticker)/i.test(name)?'sticker':'image') : videoExt.test(name)?'video':audioExt.test(name)?'audio':'document';
+  const mediaKind = name => imageExt.test(name)? (/(?:^|[-_])(?:STK|STICKER)(?:[-_.]|$)/i.test(name)?'sticker':'image') : videoExt.test(name)?'video':audioExt.test(name)?'audio':'document';
   const basename = path => String(path).replace(/\\/g,'/').split('/').pop();
-  const normalizeFile = name => basename(name).normalize('NFC').trim().toLocaleLowerCase();
+  const normalizeFile = name => basename(name).normalize('NFC').replace(/[\u200e\u200f\u061c\u202a-\u202e\u2066-\u2069]/g,'').trim().toLocaleLowerCase();
   const urlCache = new Map();
   function objectUrl(file){ if(!urlCache.has(file))urlCache.set(file,URL.createObjectURL(file));return urlCache.get(file); }
   function releaseMedia(){for(const url of urlCache.values())URL.revokeObjectURL(url);urlCache.clear();}
@@ -51,10 +51,21 @@
       if(Number(m[1])>12)dmy++;
       if(Number(m[2])>12)mdy++;
     }
-    return mdy>dmy?'MDY':'DMY';
+    if(mdy!==dmy)return mdy>dmy?'MDY':'DMY';
+    // If all chat dates are ambiguous, an ISO date inside an attachment name can offer a clue.
+    let mScore=0,dScore=0;
+    for(const line of text.split('\n').slice(0,2000)){
+      const stamp=line.match(/^\s*\[?(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})/);
+      const iso=line.match(/(?:PHOTO|VIDEO|AUDIO|STICKER|IMG|VID)[-_](20\d{2})[-_](\d{2})[-_](\d{2})/i);
+      if(!stamp||!iso)continue;
+      const a=Number(stamp[1]),b=Number(stamp[2]),month=Number(iso[2]),day=Number(iso[3]);
+      if(a===month&&b===day)mScore++;
+      if(a===day&&b===month)dScore++;
+    }
+    return mScore>dScore?'MDY':'DMY';
   }
   function parseChat(text, fileName) {
-    text=text.replace(/^\uFEFF/,'').replace(/\r\n?/g,'\n').replace(/[\u200e\u200f\u202a-\u202e]/g,'');
+    text=text.replace(/^\uFEFF/,'').replace(/\r\n?/g,'\n').replace(/[\u200e\u200f\u061c\u202a-\u202e\u2066-\u2069]/g,'');
     const format=detectFormat(text);
     const messages=[];
     // Android: 14/11/2026, 10:23 - Sender: message
@@ -94,25 +105,48 @@
     const title=base==='Chat'||!base ? (senders.length===2 ? senders.find(s=>s!==likelyMe)||'Imported chat' : 'Imported group') : base;
     return {id:crypto.randomUUID?.()||String(Date.now()+Math.random()),title,fileName,messages,senders,names,likelyMe,me:likelyMe,isGroup:senders.length>2,first:messages[0].date,last:messages[messages.length-1].date};
   }
-  // Exact filename matching prevents the wrong image from appearing under a message.
-  // A message can include captions or multiline text after the attachment notice.
-  function attachmentName(text){
-    const m=String(text).match(/(?:^|\n)\s*(?:\u200e)?([^\n\r<>]{1,260}\.[a-z0-9]{2,5})\s*\(file attached\)/i);
-    return m ? basename(m[1].trim()) : null;
+  // Recognize Android's "filename (file attached)", iOS's "<attached: filename>",
+  // and variants with invisible Unicode direction marks, paths, or captions.
+  // Match ONLY to a real imported file. Never guess which media belongs to a message.
+  const attachmentPatterns = [
+    /<\s*attached\s*:\s*([^>\r\n]{1,500})\s*>/gi,
+    /(?:^|\n)\s*([^\r\n<>]{1,500}\.[a-z0-9]{1,12})\s*\(\s*file\s+attached\s*\)/gi,
+    /(?:^|\n)\s*(?:attachment|attached file)\s*:\s*([^\r\n<>]{1,500}\.[a-z0-9]{1,12})/gi
+  ];
+  function attachmentReferences(text){
+    const source=String(text).replace(/[\u200e\u200f\u061c\u202a-\u202e\u2066-\u2069]/g,'');
+    const out=[];
+    for(const pattern of attachmentPatterns){
+      pattern.lastIndex=0;
+      for(const m of source.matchAll(pattern)){
+        const name=basename(m[1].trim().replace(/^['"]|['"]$/g,''));
+        if(name && !out.some(a=>normalizeFile(a.name)===normalizeFile(name)))out.push({name,marker:m[0].trim()});
+      }
+    }
+    return out;
   }
   function attachMedia(chat, files){
     const lookup=new Map();
-    for(const file of files){const key=normalizeFile(file.name);if(mediaExt.test(key)&&!lookup.has(key))lookup.set(key,file);}
+    for(const file of files){
+      const key=normalizeFile(file.name);
+      if(key && !lookup.has(key))lookup.set(key,file);
+    }
     chat.media=[];
     chat.links=[];
+    chat.missing=0;
     for(const msg of chat.messages){
       msg.media=null;
+      msg.mediaItems=[];
       if(msg.system)continue;
-      const name=attachmentName(msg.text);
-      if(name){
-        const file=lookup.get(normalizeFile(name));
-        if(file){msg.media={name,file,kind:mediaKind(name),msgId:msg.id};chat.media.push(msg.media);}
+      const refs=attachmentReferences(msg.text);
+      for(const ref of refs){
+        const file=lookup.get(normalizeFile(ref.name));
+        if(file){
+          const entry={name:ref.name,file,kind:mediaKind(ref.name),msgId:msg.id};
+          msg.mediaItems.push(entry);chat.media.push(entry);
+        }else chat.missing++;
       }
+      msg.media=msg.mediaItems[0]||null;
       for(const m of msg.text.matchAll(/https?:\/\/[^\s<>"']+/g)){
         const candidate=m[0].replace(/[.,;!?)]*$/,'');
         try{const url=new URL(candidate);if(['http:','https:'].includes(url.protocol))chat.links.push({url:candidate,date:msg.date,msgId:msg.id});}catch{}
@@ -120,24 +154,31 @@
     }
     chat.matched=chat.media.length;
   }
+  function chatMediaId(media){const chat=currentChat();return chat?chat.media.indexOf(media):-1;}
   function usableSrc(media){return htmlEscape(objectUrl(media.file));}
   function mediaMarkup(media,full=false){
     const src=usableSrc(media);
-    const id=media.msgId;
+    const id=chatMediaId(media);
     if(media.kind==='image'||media.kind==='sticker')return `<button type="button" class="attachment-image ${media.kind==='sticker'?'sticker-image':''}" data-media-id="${id}" title="Open ${htmlEscape(media.name)}"><img src="${src}" alt="${htmlEscape(media.name)}" loading="lazy"></button>`;
     if(media.kind==='video')return `<button type="button" class="attachment-video" data-media-id="${id}" title="Play video"><video src="${src}#t=0.1" preload="metadata" muted playsinline></video><span class="play-circle">▶</span></button>`;
     if(media.kind==='audio')return `<div class="attachment-audio"><span class="audio-symbol">♫</span><audio controls preload="none" src="${src}"></audio></div>`;
     return `<button type="button" class="attachment-document" data-media-id="${id}"><span class="doc-icon">▤</span><span>${htmlEscape(media.name)}</span><span class="doc-arrow">↗</span></button>`;
   }
   function messageContent(msg){
-    if(!msg.media){return isMedia(msg.text)?`<span class="media-placeholder">▧ ${htmlEscape(msg.text)}</span>`:safeLinks(msg.text);}
-    const remaining=msg.text.replace(/(?:^|\n)\s*(?:\u200e)?[^\n\r<>]{1,260}\.[a-z0-9]{2,5}\s*\(file attached\)\s*/i,'').trim();
-    return mediaMarkup(msg.media)+(remaining?`<div class="media-caption">${safeLinks(remaining)}</div>`:'');
+    const refs=attachmentReferences(msg.text);
+    if(!refs.length)return isMedia(msg.text)?`<span class="media-placeholder">▧ ${htmlEscape(msg.text)}</span>`:safeLinks(msg.text);
+    let remaining=msg.text.replace(/[\u200e\u200f\u061c\u202a-\u202e\u2066-\u2069]/g,'');
+    for(const p of attachmentPatterns){p.lastIndex=0;remaining=remaining.replace(p,'');}
+    remaining=remaining.trim();
+    const previews=(msg.mediaItems||[]).map(item=>mediaMarkup(item)).join('');
+    const missing=refs.filter(ref=>!(msg.mediaItems||[]).some(item=>normalizeFile(item.name)===normalizeFile(ref.name)));
+    const placeholders=missing.map(ref=>`<div class="media-placeholder">▧ ${htmlEscape(ref.name)} (not found in selected folder)</div>`).join('');
+    return previews+placeholders+(remaining?`<div class="media-caption">${safeLinks(remaining)}</div>`:'');
   }
   function openMediaById(id){
-    const chat=currentChat(),msg=chat?.messages.find(m=>m.id===Number(id));
-    if(!msg?.media)return;
-    const media=msg.media,src=objectUrl(media.file);
+    const chat=currentChat(),media=chat?.media[Number(id)];
+    if(!media)return;
+    const src=objectUrl(media.file);
     $('mediaTitle').textContent=media.name;
     $('mediaDownload').href=src;$('mediaDownload').download=media.name;
     const viewer=$('mediaViewer');viewer.replaceChildren();
@@ -156,12 +197,12 @@
     const tab=state.infoTab;
     let content='';
     if(tab==='media'){
-      content=chat.media.filter(m=>m.kind!=='document').map(m=>`<button type="button" class="gallery-tile" data-media-id="${m.msgId}" title="${htmlEscape(m.name)}">${['image','sticker'].includes(m.kind)?`<img src="${usableSrc(m)}" loading="lazy" alt="${htmlEscape(m.name)}">`:m.kind==='video'?`<video src="${usableSrc(m)}#t=0.1" muted preload="metadata"></video><span class="gallery-play">▶</span>`:'<span class="gallery-audio">♫</span>'}</button>`).join('')||'<p class="tab-empty">No matching photos, stickers, videos, or audio were found in this export.</p>';
+      content=chat.media.filter(m=>m.kind!=='document').map(m=>`<button type="button" class="gallery-tile" data-media-id="${chatMediaId(m)}" title="${htmlEscape(m.name)}">${['image','sticker'].includes(m.kind)?`<img src="${usableSrc(m)}" loading="lazy" alt="${htmlEscape(m.name)}">`:m.kind==='video'?`<video src="${usableSrc(m)}#t=0.1" muted preload="metadata"></video><span class="gallery-play">▶</span>`:'<span class="gallery-audio">♫</span>'}</button>`).join('')||'<p class="tab-empty">No matching photos, stickers, videos, or audio were found in this export.</p>';
       content=`<div class="media-grid">${content}</div>`;
     }else if(tab==='links'){
       content=chat.links.map(l=>`<a class="info-link" href="${htmlEscape(l.url)}" target="_blank" rel="noopener noreferrer"><span>🔗</span><span>${htmlEscape(l.url)}</span></a>`).join('')||'<p class="tab-empty">No links found in the chat.</p>';
     }else{
-      content=chat.media.filter(m=>m.kind==='document').map(m=>`<button type="button" class="info-doc" data-media-id="${m.msgId}"><span>▤</span><span>${htmlEscape(m.name)}</span><span>↗</span></button>`).join('')||'<p class="tab-empty">No matching document files were found.</p>';
+      content=chat.media.filter(m=>m.kind==='document').map(m=>`<button type="button" class="info-doc" data-media-id="${chatMediaId(m)}"><span>▤</span><span>${htmlEscape(m.name)}</span><span>↗</span></button>`).join('')||'<p class="tab-empty">No matching document files were found.</p>';
     }
     const total=chat.media.length;
     $('chatInfo').innerHTML=`<div class="profile-hero"><div class="profile-avatar" style="background:${avatarColor(chat.title)}">${htmlEscape(chat.title.charAt(0).toUpperCase())}</div><h3>${htmlEscape(chat.title)}</h3><p>${chat.isGroup?`${chat.senders.length} participants`:'Imported WhatsApp conversation'}</p><p>${chat.messages.length.toLocaleString()} messages · ${total} matched attachments</p></div><div class="profile-stat">${(counts.image||0)+(counts.sticker||0)} images & stickers · ${counts.video||0} videos · ${counts.audio||0} audio · ${counts.document||0} docs</div><div class="info-tabs"><button type="button" data-tab="media" class="${tab==='media'?'selected':''}">Media</button><button type="button" data-tab="links" class="${tab==='links'?'selected':''}">Links (${chat.links.length})</button><button type="button" data-tab="docs" class="${tab==='docs'?'selected':''}">Docs</button></div><div class="info-tab-content">${content}</div><div class="profile-meta"><div>Export: ${htmlEscape(chat.fileName)}</div><div>From ${htmlEscape(formatDate(chat.first))} to ${htmlEscape(formatDate(chat.last))}</div><div>You: ${htmlEscape(myName(chat)||'Not selected')}</div></div>`;
@@ -183,7 +224,7 @@
     }).join('');
     elements.list.querySelectorAll('.chat-item').forEach(el=>el.addEventListener('click',()=>openChat(el.dataset.id)));
   }
-  function isMedia(text){return /^\s*(?:<media omitted>|[\w\-. ()]+\.(?:jpg|jpeg|png|gif|webp|mp4|mov|mp3|ogg|opus|pdf|docx?|xlsx?|pptx?)\s*\(file attached\)|image omitted|video omitted|audio omitted|sticker omitted)\s*$/i.test(text.trim());}
+  function isMedia(text){return /^\s*(?:<media omitted>|<attached\s*:[^>]+>|[\w\-. ()]+\.(?:jpg|jpeg|png|gif|webp|mp4|mov|mp3|ogg|opus|pdf|docx?|xlsx?|pptx?)\s*\(file attached\)|image omitted|video omitted|audio omitted|sticker omitted)\s*$/i.test(text.trim());}
   function safeLinks(raw){
     return String(raw).split(/(https?:\/\/[^\s<>"']+)/g).map(part=>{
       if(!/^https?:\/\//i.test(part))return htmlEscape(part);
@@ -215,9 +256,9 @@
   }
   async function importFiles(files){
     const all=[...files];
-    const choices=all.filter(f=>f.name.toLowerCase().endsWith('.txt'));
+    const choices=all.filter(f=>/\.txt$/i.test(f.name) && (/(?:^|\/)(?:_chat|whatsapp chat|chat with)/i.test(f.webkitRelativePath||f.name)||all.filter(x=>/\.txt$/i.test(x.name)).length===1));
     if(!choices.length){notify('No .txt export found. Select the folder with the exported chat and attachments.');return;}
-    const media=all.filter(f=>mediaExt.test(f.name)&&!f.name.toLowerCase().endsWith('.txt'));
+    const media=all.filter(f=>!f.name.toLowerCase().endsWith('.txt') && !f.name.startsWith('.')); // Match unknown formats too.
     let success=0,matched=0;
     for(const file of choices){
       try{
